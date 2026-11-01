@@ -6,6 +6,6 @@ rasterio>=1.3
 pandas>=2.0
 requests>=2.31
 pyyaml>=6.0
-# Phase 1+ (training), install on srv-tesla-bme inside the training image
-# torch (CUDA build matching the P100 driver), segmentation-models-pytorch, albumentations, torchmetrics
 matplotlib>=3.8
+# Phase 1+ (training), installed in the training container
+# torch (CUDA build matching the P100 driver), segmentation-models-pytorch, albumentations, torchmetrics

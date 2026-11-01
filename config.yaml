@@ -2,11 +2,13 @@
 # Edit paths here, scripts read nothing from the command line except --config.
 
 paths:
-  root: /nfs/shared/projects/glacier-seg/data              # change to the data volume on the target host
-  raw_glamos: /nfs/shared/projects/glacier-seg/data/raw/glamos
-  raw_image: /nfs/shared/projects/glacier-seg/data/raw/swissimage
-  raw_dem: /nfs/shared/projects/glacier-seg/data/raw/swissalti3d
-  manifest: /nfs/shared/projects/glacier-seg/data/manifest
+  # Relative paths resolve against the repo root (the folder holding this file).
+  # Absolute paths are used as-is, e.g. to move training chips to a local SSD later.
+  root: data
+  raw_glamos: data/raw/glamos
+  raw_image: data/raw/swissimage
+  raw_dem: data/raw/swissalti3d
+  manifest: data/manifest
 
 glamos:
   # CC BY 4.0, cite GLAMOS on every figure / README
@@ -30,7 +32,7 @@ stac:
 
 pilot:
   # Phase 0/1 works on a small, diverse set. Mix of clean ice and heavy debris cover.
-  # Matched case-insensitively against the name column of SGI2016.
+  # Matched exactly against any text column of SGI2016 (sgi-id here).
   glaciers:            # SGI2016 sgi-id (unique); names are ambiguous (two Findelgletscher)
     - B36-26           # Grosser Aletschgletscher   78.5 km2  acq 2017
     - B43-03           # Rhonegletscher             14.6 km2  acq 2016

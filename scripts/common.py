@@ -16,8 +16,13 @@ def load_config() -> dict:
     p = argparse.ArgumentParser()
     p.add_argument("--config", default=str(Path(__file__).resolve().parent.parent / "config.yaml"))
     args = p.parse_args()
-    with open(args.config, encoding="utf-8") as f:
+    cfg_path = Path(args.config).resolve()
+    with open(cfg_path, encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
+    base = cfg_path.parent
+    for key, val in cfg["paths"].items():
+        pth = Path(val)
+        cfg["paths"][key] = str(pth if pth.is_absolute() else (base / pth).resolve())
     for key in ("raw_glamos", "raw_image", "raw_dem", "manifest"):
         Path(cfg["paths"][key]).mkdir(parents=True, exist_ok=True)
     return cfg
