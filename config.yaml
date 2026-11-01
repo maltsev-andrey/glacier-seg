@@ -31,13 +31,13 @@ stac:
 pilot:
   # Phase 0/1 works on a small, diverse set. Mix of clean ice and heavy debris cover.
   # Matched case-insensitively against the name column of SGI2016.
-  glaciers:
-    - Grosser Aletschgletscher
-    - Rhonegletscher
-    - Morteratschgletscher
-    - Unteraargletscher
-    - Zmuttgletscher
-    - Findelgletscher
+  glaciers:            # SGI2016 sgi-id (unique); names are ambiguous (two Findelgletscher)
+    - B36-26           # Grosser Aletschgletscher   78.5 km2  acq 2017
+    - B43-03           # Rhonegletscher             14.6 km2  acq 2016
+    - E22-03           # Vadret da Morteratsch      14.9 km2  acq 2015
+    - A54g-11          # Unteraargletscher          22.7 km2  acq 2016  heavy debris
+    - B57-05           # Zmuttgletscher             14.8 km2  acq 2016  heavy debris
+    - B56-03           # Findelgletscher            13.9 km2  acq 2015
   buffer_m: 300              # context around the outline so the model sees rock / moraine too
 
 raster:

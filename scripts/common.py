@@ -53,13 +53,18 @@ def list_vector_layers(folder: Path) -> list[tuple[Path, str | None]]:
     return out
 
 
-def find_layer(folder: Path, hint: str, exclude=("divide", "point", "debris")) -> tuple[Path, str | None]:
-    """Pick the first layer whose file/layer name contains hint and none of the excluded words."""
+def find_layer(folder: Path, hint: str,
+               exclude=("divide", "point", "location", "centerline", "debris")) -> tuple[Path, str | None]:
+    """Pick the first POLYGON layer whose file/layer name contains hint and none of the excluded words."""
+    import pyogrio
+
     hint = hint.lower()
     excl = [e for e in exclude if e != hint]
     for path, layer in list_vector_layers(folder):
         label = f"{path.name}:{layer or ''}".lower()
-        if hint in label and not any(e in label for e in excl):
+        if hint not in label or any(e in label for e in excl):
+            continue
+        if "polygon" in str(pyogrio.read_info(path, layer=layer)["geometry_type"]).lower():
             return path, layer
     raise FileNotFoundError(f"No layer matching '{hint}' under {folder}. Check manifest/glamos_layers.txt")
 
