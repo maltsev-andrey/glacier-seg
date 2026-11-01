@@ -1,0 +1,53 @@
+# glacier-seg: single config for all pipeline stages.
+# Edit paths here, scripts read nothing from the command line except --config.
+
+paths:
+  root: /nfs/shared/projects/glacier-seg/data              # change to the data volume on the target host
+  raw_glamos: /nfs/shared/projects/glacier-seg/data/raw/glamos
+  raw_image: /nfs/shared/projects/glacier-seg/data/raw/swissimage
+  raw_dem: /nfs/shared/projects/glacier-seg/data/raw/swissalti3d
+  manifest: /nfs/shared/projects/glacier-seg/data/manifest
+
+glamos:
+  # CC BY 4.0, cite GLAMOS on every figure / README
+  inventories:
+    sgi2016: https://doi.glamos.ch/data/inventory/inventory_sgi2016_r2020.zip   # labels for training (2013-2018)
+    sgi2023: https://doi.glamos.ch/data/inventory/inventory_sgi2023_r2026.zip   # independent test set (2021-2024)
+    sgi2010: https://doi.glamos.ch/data/inventory/inventory_sgi2010_r2010.zip   # context only, no imagery pair
+    sgi1973: https://doi.glamos.ch/data/inventory/inventory_sgi1973_r1976.zip   # context only
+    sgi1850: https://doi.glamos.ch/data/inventory/inventory_sgi1850_r1992.zip   # context only
+  # Filename / layer-name hints used to locate layers inside the extracted zips.
+  # Run 01_fetch_glamos.py first and check manifest/glamos_layers.txt, then adjust if needed.
+  outline_hint: glacier
+  debris_hint: debris
+
+stac:
+  api: https://data.geo.admin.ch/api/stac/v0.9
+  image_collection: ch.swisstopo.swissimage-dop10   # COG, assets 0.1 m and 2 m, EPSG:2056, 1 km tiles
+  dem_collection: ch.swisstopo.swissalti3d          # COG, assets 0.5 m and 2 m
+  image_gsd_source: 0.1      # asset to read from (COG overviews are used, full 0.1 m is never pulled)
+  dem_gsd_source: 2.0
+
+pilot:
+  # Phase 0/1 works on a small, diverse set. Mix of clean ice and heavy debris cover.
+  # Matched case-insensitively against the name column of SGI2016.
+  glaciers:
+    - Grosser Aletschgletscher
+    - Rhonegletscher
+    - Morteratschgletscher
+    - Unteraargletscher
+    - Zmuttgletscher
+    - Findelgletscher
+  buffer_m: 300              # context around the outline so the model sees rock / moraine too
+
+raster:
+  target_res_m: 0.5          # SWISSIMAGE over the Alps is ~25 cm effective; 0.5 m keeps margins sharp, 25x less data
+  tile_size_m: 1000          # swisstopo grid
+  dem_res_m: 2.0
+  workers: 6                 # parallel HTTP reads
+
+classes:
+  0: background              # rock, vegetation, water, moraine
+  1: clean_ice_firn          # glacier outline minus debris polygons
+  2: debris_covered_ice      # SGI debris-cover polygons inside the outline
+  255: ignore                # nodata / outside imagery
