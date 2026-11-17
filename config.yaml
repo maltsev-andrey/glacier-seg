@@ -9,6 +9,8 @@ paths:
   raw_image: data/raw/swissimage
   raw_dem: data/raw/swissalti3d
   manifest: data/manifest
+  labels: data/labels          # Phase 1: rasterized label tiles
+  chips: data/chips            # Phase 1: training chips (npz)
 
 glamos:
   # CC BY 4.0, cite GLAMOS on every figure / README
@@ -53,3 +55,43 @@ classes:
   1: clean_ice_firn          # glacier outline minus debris polygons
   2: debris_covered_ice      # SGI debris-cover polygons inside the outline
   255: ignore                # nodata / outside imagery
+
+phase1:
+  ignore_band_m: 10          # half-width of the ignore band around every class boundary (README 5.4)
+  max_label_gap_years: 2     # image/label pairs with a larger gap are excluded from training
+  chip_px: 512               # chip size at target_res_m -> 256 m on the ground
+  chip_stride_px: 496        # 4x4 grid covers a 2000 px tile, 16 px overlap
+  min_glacier_frac: 0.01     # keep a chip if >=1% of valid pixels are ice/debris...
+  bg_keep_frac: 0.10         # ...else keep this deterministic share of pure-background chips as negatives
+  qc_per_glacier: 4          # overlay PNGs per glacier for visual check
+  # SGI2016 acquisition year per pilot glacier (inventory attribute, see README 5.1)
+  acq_year:
+    B36-26: 2017             # Grosser Aletschgletscher
+    B43-03: 2016             # Rhonegletscher
+    E22-03: 2015             # Vadret da Morteratsch
+    A54g-11: 2016            # Unteraargletscher
+    B57-05: 2016             # Zmuttgletscher
+    B56-03: 2015             # Findelgletscher
+  # Split by glacier, never by chip (README 5.4)
+  split:
+    train: [B36-26, B43-03, A54g-11, B56-03]
+    val:   [B57-05]
+    test:  [E22-03]
+
+phase2:
+  input_set: rgb             # rgb (3 ch) | rgb_terrain (5 ch: + elevation + slope); run both, compare IoU
+  encoder: resnet34          # segmentation-models-pytorch encoder
+  encoder_weights: imagenet  # null for offline / from-scratch runs
+  epochs: 60
+  batch_size: 8              # 512 px, fp16: ~6 GB on the P100 at 8; raise to 12 if it fits
+  lr: 3.0e-4                 # AdamW, cosine decay to lr/50
+  weight_decay: 1.0e-4
+  dice_weight: 0.5           # loss = CE + dice_weight * Dice, both ignore class 255
+  max_class_weight: 10.0     # cap for median-frequency class weights (debris would explode otherwise)
+  augment: true              # flips, 90-deg rotations, brightness/contrast jitter on RGB
+  amp: true                  # fp16 autocast; P100 runs fp16 at full rate
+  num_workers: 4
+  early_stop_patience: 12    # epochs without val mIoU improvement
+  limit_train_batches: 0     # 0 = full epoch; small number = smoke test
+  seed: 42
+  models_dir: data/models    # resolved like paths.* (relative to repo root)

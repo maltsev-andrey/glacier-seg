@@ -6,7 +6,7 @@
 ![GDAL](https://img.shields.io/badge/GDAL-3.9-5CAE58)
 ![rasterio](https://img.shields.io/badge/rasterio-1.4-2a78d6)
 ![GPU](https://img.shields.io/badge/GPU-Tesla%20P100%2016GB-76B900?logo=nvidia&logoColor=white)
-![Status](https://img.shields.io/badge/status-Phase%200%20done-1baf7a)
+![Status](https://img.shields.io/badge/status-Phase%201%20done-1baf7a)
 ![Data](https://img.shields.io/badge/data-CC%20BY%204.0%20%7C%20swisstopo%20OGD-eda100)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
@@ -34,9 +34,10 @@
 3. [Pipeline](#3-pipeline)
 4. [Progress by phase](#4-progress-by-phase)
 5. [Phase 0: data pipeline and QC](#5-phase-0-data-pipeline-and-qc)
-6. [Quick start](#6-quick-start)
-7. [Repository layout](#7-repository-layout)
-8. [Attribution and license](#8-attribution-and-license)
+6. [Phase 1: labels and chips](#6-phase-1-labels-and-chips)
+7. [Quick start](#7-quick-start)
+8. [Repository layout](#8-repository-layout)
+9. [Attribution and license](#9-attribution-and-license)
 
 ---
 
@@ -81,8 +82,8 @@ infer.py / area.py    (Phase 3) per-glacier area change, maps
 | Phase | Scope | Status | Exit criterion |
 |---|---|---|---|
 | 0 | Data pipeline, 6 pilot glaciers | ✅ done | Tiles readable, outlines align with imagery |
-| 1 | Labels + chips | ⏳ next | Class balance report, visual check of chips |
-| 2 | U-Net baseline (RGB, then RGB+DEM) | planned | IoU per class on validation glacier |
+| 1 | Labels + chips | ✅ done | Class balance report, visual check of chips |
+| 2 | U-Net baseline (RGB, then RGB+DEM) | ⏳ next | IoU per class on validation glacier |
 | 3 | Test against SGI2023 | planned | Area error per glacier vs GLAMOS, in % |
 | 4 | Scale to all Swiss glaciers | planned | Area-change table + maps |
 | 5 | Write-up | planned | Final figures and results |
@@ -138,7 +139,42 @@ All 12 overlays (one ice tile and one debris tile per glacier) are in [`docs/img
 | Brightness differs between flight years | Per-tile normalization, colour augmentation |
 | Planned split | Train: Aletsch, Rhone, Unteraar, Findel. Validation: Zmutt. Test: Morteratsch + all glaciers vs SGI2023 |
 
-## 6. Quick start
+## 6. Phase 1: labels and chips
+
+### 6.1 Label rasterization (`04_make_labels.py`)
+
+Each of the 375 tiles gets one uint8 label raster at 0.5 m on the imagery grid. The **whole SGI2016 inventory** is rasterized, not just the pilot glaciers — neighbouring glaciers appear inside pilot tiles and must not be labelled background. A ±10 m ignore band (class 255) is burned around every outline and debris boundary: with labels 0-4 years older than the imagery, the boundary pixels are exactly where the label is least trustworthy.
+
+Pixel totals over all 375 tiles:
+
+| Class | Pixels | Share of valid |
+|---|---:|---:|
+| 0 background | 592,419,175 | 42.5% |
+| 1 clean ice/firn | 742,204,319 | 53.2% |
+| 2 debris-covered ice | 60,706,576 | 4.3% |
+| 255 ignore | 104,669,930 | 7.0% of all |
+
+### 6.2 Chips (`05_chips.py`)
+
+512 px chips (256 m on the ground) on a 4×4 grid per tile, 16 px overlap. Each chip is one `.npz`: RGB uint8, elevation and Horn slope float32 (2 m DEM upsampled to 0.5 m), label uint8. A chip is kept if ≥ 1% of its valid pixels are ice or debris; pure-background chips are kept at a deterministic 10% as negatives. The gap rule marks every chip with `gap_ok = |image year − inventory year| ≤ 2`; training uses only `gap_ok` chips.
+
+**15,294 chips** total, mean pixel fractions per chip:
+
+| Split | gap_ok | Chips | Ice | Debris | Background |
+|---|---|---:|---:|---:|---:|
+| train | ✅ | **3,795** | 0.70 | 0.050 | 0.25 |
+| train | ✗ | 8,693 | 0.70 | 0.045 | 0.26 |
+| val (Zmutt) | ✅ | 499 | 0.56 | 0.122 | 0.32 |
+| val (Zmutt) | ✗ | 979 | 0.57 | 0.125 | 0.31 |
+| test (Morteratsch) | ✗ | 1,328 | 0.61 | 0.057 | 0.34 |
+
+Findings that shape Phase 2:
+
+- **Debris is 12× rarer than clean ice in train** (5.0% vs 70%) → class weighting in the loss, otherwise the model learns "debris never happens".
+- **Validation is deliberately hard**: Zmutt has 2.4× the debris share of the training set, so val IoU will not flatter the model on its weakest class.
+- **Morteratsch has no gap_ok pair** (inventory 2015, nearest flight 2019), so its SGI2016-based chips carry label noise at retreating margins. The honest test remains SGI2023 in Phase 3.
+
+## 7. Quick start
 
 ```bash
 git clone https://github.com/maltsev-andrey/glacier-seg.git
@@ -150,11 +186,14 @@ python scripts/01_fetch_glamos.py      # ~1 min, inventories + layer report
 python scripts/02_select_tiles.py      # STAC queries, tile manifest
 python scripts/03_download_tiles.py    # ~10 min, ~8 GB under data/
 python scripts/check_phase0.py         # stats + overlay PNGs in data/qc/
+
+python scripts/04_make_labels.py       # ~5 min, 0.5 m label tiles under data/labels/
+python scripts/05_chips.py             # ~40 min, ~25 GB of chips under data/chips/
 ```
 
 All settings live in `config.yaml`. Relative paths resolve against the repository root; `data/` is created automatically and is not tracked by git.
 
-## 7. Repository layout
+## 8. Repository layout
 
 ```
 glacier-seg/
@@ -165,12 +204,14 @@ glacier-seg/
 │   ├── 01_fetch_glamos.py
 │   ├── 02_select_tiles.py
 │   ├── 03_download_tiles.py
-│   └── check_phase0.py
+│   ├── check_phase0.py
+│   ├── 04_make_labels.py
+│   └── 05_chips.py
 ├── docs/img/                README figures, QC overlays
 └── data/                    (generated, git-ignored) raw tiles, manifests, QC
 ```
 
-## 8. Attribution and license
+## 9. Attribution and license
 
 - **Swiss Glacier Inventory**: GLAMOS - Glacier Monitoring Switzerland, CC BY 4.0.
   SGI2016: Linsbauer, A. et al. (2021), *Frontiers in Earth Science*, doi:[10.3389/feart.2021.704189](https://doi.org/10.3389/feart.2021.704189).
