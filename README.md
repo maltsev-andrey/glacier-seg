@@ -6,7 +6,7 @@
 ![GDAL](https://img.shields.io/badge/GDAL-3.9-5CAE58)
 ![rasterio](https://img.shields.io/badge/rasterio-1.4-2a78d6)
 ![GPU](https://img.shields.io/badge/GPU-Tesla%20P100%2016GB-76B900?logo=nvidia&logoColor=white)
-![Status](https://img.shields.io/badge/status-Phase%202%20done-1baf7a)
+![Status](https://img.shields.io/badge/status-Phase%203%20done-1baf7a)
 ![Data](https://img.shields.io/badge/data-CC%20BY%204.0%20%7C%20swisstopo%20OGD-eda100)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
@@ -36,9 +36,10 @@
 5. [Phase 0: data pipeline and QC](#5-phase-0-data-pipeline-and-qc)
 6. [Phase 1: labels and chips](#6-phase-1-labels-and-chips)
 7. [Phase 2: U-Net baseline](#7-phase-2-u-net-baseline)
-8. [Quick start](#8-quick-start)
-9. [Repository layout](#9-repository-layout)
-10. [Attribution and license](#10-attribution-and-license)
+8. [Phase 3: test against SGI2023](#8-phase-3-test-against-sgi2023)
+9. [Quick start](#9-quick-start)
+10. [Repository layout](#10-repository-layout)
+11. [Attribution and license](#11-attribution-and-license)
 
 ---
 
@@ -85,7 +86,7 @@ infer.py / area.py    (Phase 3) per-glacier area change, maps
 | 0 | Data pipeline, 6 pilot glaciers | ✅ done | Tiles readable, outlines align with imagery |
 | 1 | Labels + chips | ✅ done | Class balance report, visual check of chips |
 | 2 | U-Net baseline (RGB, then RGB+DEM) | ✅ done | IoU per class on validation glacier |
-| 3 | Test against SGI2023 | planned | Area error per glacier vs GLAMOS, in % |
+| 3 | Test against SGI2023 | ✅ done | Area error per glacier vs GLAMOS, in % |
 | 4 | Scale to all Swiss glaciers | planned | Area-change table + maps |
 | 5 | Write-up | planned | Final figures and results |
 
@@ -194,7 +195,28 @@ Training environment note: recent PyTorch wheels dropped Pascal (sm_60) support 
 
 Next (Phase 3): inference on full tiles and the honest test — 2021-2024 imagery against the independent SGI2023 inventory, including Morteratsch.
 
-## 8. Quick start
+## 8. Phase 3: test against SGI2023
+
+`predict.py` runs the `rgb_terrain` model over every tile and image year (sliding 512 px window, 50 % overlap, softmax averaging); `eval_sgi2023.py` scores the class rasters against the **independent SGI2023 inventory** (acquired 2021-2024), which no stage of training ever saw. The same ±10 m boundary tolerance as in training labels applies. SWISSIMAGE covers each glacier in parts across flight years, so each (glacier, year) row scores only the tiles flown that year — areas within a row compare the same footprint.
+
+Headline results (full table: `manifest/eval_sgi2023.csv`):
+
+| Glacier | Role in training | Epoch-matched glacier IoU | Area pred vs SGI2023 |
+|---|---|---:|---|
+| Aletsch, Rhone, Unteraar, Findel | train | 0.86 – 1.00 | within 1–2 % |
+| Zmutt | validation only | 0.64 | 17.80 vs 18.05 km² |
+| **Morteratsch** | **never seen** | **0.73 – 0.78** | 17.7 vs 15.5 km² |
+
+Findings:
+
+- **The retreat signal is real and systematic.** On 2017-2020 imagery the model consistently predicts more ice than SGI2023 maps (Zmutt 22.5 vs 18.1 km², Morteratsch 19.7 vs 15.5 km²) — that is glacier retreat seen through an older lens. On epoch-matched 2023+ imagery, areas agree to within ~1 % on Rhone and Findel.
+- **Morteratsch, the honest test, lands at 0.73-0.78 glacier IoU** against an inventory it never trained on, with no SGI2016 pair ever used.
+- **Debris cover remains the weak class off the training set**: debris IoU 0.15-0.17 on epoch-matched Zmutt and Morteratsch vs 0.34-0.45 on training glaciers. More debris-heavy glaciers in training is the obvious Phase 4 lever.
+- The Zmutt 2023 row (IoU 0.64 with near-perfect area agreement) points at misplaced rather than missing ice — consistent with fresh snow in the 2023 flight; worth a look in QGIS.
+
+Predictions are georeferenced GeoTIFFs (`data/predictions/<run>/<year>/<tile>.tif`) and overlay directly on the swisstopo basemap in QGIS.
+
+## 9. Quick start
 
 ```bash
 git clone https://github.com/maltsev-andrey/glacier-seg.git
@@ -212,11 +234,15 @@ python scripts/05_chips.py             # ~40 min, ~25 GB of chips under data/chi
 
 CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=0 \
   python scripts/train.py              # ~2.5 h on a P100; set phase2.input_set in config.yaml
+
+CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=0 \
+  python scripts/predict.py            # ~2 h, class GeoTIFFs under data/predictions/
+python scripts/eval_sgi2023.py         # CPU, scores vs SGI2023 -> manifest/eval_sgi2023.csv
 ```
 
 All settings live in `config.yaml`. Relative paths resolve against the repository root; `data/` is created automatically and is not tracked by git.
 
-## 9. Repository layout
+## 10. Repository layout
 
 ```
 glacier-seg/
@@ -230,12 +256,14 @@ glacier-seg/
 │   ├── check_phase0.py
 │   ├── 04_make_labels.py
 │   ├── 05_chips.py
-│   └── train.py
+│   ├── train.py
+│   ├── predict.py
+│   └── eval_sgi2023.py
 ├── docs/img/                README figures, QC overlays
 └── data/                    (generated, git-ignored) raw tiles, manifests, QC
 ```
 
-## 10. Attribution and license
+## 11. Attribution and license
 
 - **Swiss Glacier Inventory**: GLAMOS - Glacier Monitoring Switzerland, CC BY 4.0.
   SGI2016: Linsbauer, A. et al. (2021), *Frontiers in Earth Science*, doi:[10.3389/feart.2021.704189](https://doi.org/10.3389/feart.2021.704189).

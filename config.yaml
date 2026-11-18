@@ -79,7 +79,7 @@ phase1:
     test:  [E22-03]
 
 phase2:
-  input_set: rgb_terrain             # rgb (3 ch) | rgb_terrain (5 ch: + elevation + slope); run both, compare IoU
+  input_set: rgb             # rgb (3 ch) | rgb_terrain (5 ch: + elevation + slope); run both, compare IoU
   encoder: resnet34          # segmentation-models-pytorch encoder
   encoder_weights: imagenet  # null for offline / from-scratch runs
   epochs: 60
@@ -95,3 +95,11 @@ phase2:
   limit_train_batches: 0     # 0 = full epoch; small number = smoke test
   seed: 42
   models_dir: data/models    # resolved like paths.* (relative to repo root)
+
+phase3:
+  run: unet_resnet34_rgb_terrain   # trained run to use: models_dir/<run>/best.pt
+  window_stride_px: 256            # 50% overlap; softmax averaged across windows
+  batch_size: 16                   # inference windows per forward pass
+  years: []                        # restrict to these image years; empty = every year in the manifest
+  predictions_dir: data/predictions
+  sgi2023_ignore_band_m: 10        # same boundary tolerance as training labels, for a fair score
