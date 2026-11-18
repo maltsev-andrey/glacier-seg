@@ -6,7 +6,7 @@
 ![GDAL](https://img.shields.io/badge/GDAL-3.9-5CAE58)
 ![rasterio](https://img.shields.io/badge/rasterio-1.4-2a78d6)
 ![GPU](https://img.shields.io/badge/GPU-Tesla%20P100%2016GB-76B900?logo=nvidia&logoColor=white)
-![Status](https://img.shields.io/badge/status-Phase%201%20done-1baf7a)
+![Status](https://img.shields.io/badge/status-Phase%202%20done-1baf7a)
 ![Data](https://img.shields.io/badge/data-CC%20BY%204.0%20%7C%20swisstopo%20OGD-eda100)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
@@ -35,9 +35,10 @@
 4. [Progress by phase](#4-progress-by-phase)
 5. [Phase 0: data pipeline and QC](#5-phase-0-data-pipeline-and-qc)
 6. [Phase 1: labels and chips](#6-phase-1-labels-and-chips)
-7. [Quick start](#7-quick-start)
-8. [Repository layout](#8-repository-layout)
-9. [Attribution and license](#9-attribution-and-license)
+7. [Phase 2: U-Net baseline](#7-phase-2-u-net-baseline)
+8. [Quick start](#8-quick-start)
+9. [Repository layout](#9-repository-layout)
+10. [Attribution and license](#10-attribution-and-license)
 
 ---
 
@@ -83,7 +84,7 @@ infer.py / area.py    (Phase 3) per-glacier area change, maps
 |---|---|---|---|
 | 0 | Data pipeline, 6 pilot glaciers | ✅ done | Tiles readable, outlines align with imagery |
 | 1 | Labels + chips | ✅ done | Class balance report, visual check of chips |
-| 2 | U-Net baseline (RGB, then RGB+DEM) | ⏳ next | IoU per class on validation glacier |
+| 2 | U-Net baseline (RGB, then RGB+DEM) | ✅ done | IoU per class on validation glacier |
 | 3 | Test against SGI2023 | planned | Area error per glacier vs GLAMOS, in % |
 | 4 | Scale to all Swiss glaciers | planned | Area-change table + maps |
 | 5 | Write-up | planned | Final figures and results |
@@ -174,7 +175,26 @@ Findings that shape Phase 2:
 - **Validation is deliberately hard**: Zmutt has 2.4× the debris share of the training set, so val IoU will not flatter the model on its weakest class.
 - **Morteratsch has no gap_ok pair** (inventory 2015, nearest flight 2019), so its SGI2016-based chips carry label noise at retreating margins. The honest test remains SGI2023 in Phase 3.
 
-## 7. Quick start
+## 7. Phase 2: U-Net baseline
+
+Two runs of `train.py` on the Tesla P100 (fp16, ~2.3 min/epoch, batch 8), differing only in `phase2.input_set`. U-Net with a resnet34 ImageNet encoder, weighted CE (median-frequency, bg/ice/debris = 1.0/0.36/5.0) + 0.5 Dice, both ignoring class 255. Validation is the debris-heavy Zmutt glacier, never seen in training.
+
+| Run | Input | Best epoch | IoU bg | IoU ice | IoU debris | mIoU |
+|---|---|---:|---:|---:|---:|---:|
+| `rgb` | RGB | 52 | 0.781 | 0.872 | 0.660 | 0.771 |
+| `rgb_terrain` | RGB + elevation + slope | 43 | **0.832** | **0.892** | **0.758** | **0.827** |
+
+Findings:
+
+- **Terrain channels buy +9.8 IoU points on debris** and +5.1 on background — exactly the two classes that get confused on moraines. The geometry hypothesis from 5.4 (debris sits on flat tongues, scree on steep slopes) holds: the terrain run starts at debris IoU 0.61 in epoch 1, where RGB starts at 0.41.
+- Ice gains little (+2.0) — it was already learnable from texture alone.
+- The terrain run also converges faster (best at epoch 43, early-stopped at 55).
+
+Training environment note: recent PyTorch wheels dropped Pascal (sm_60) support — the P100 needs `torch==2.5.1+cu121` / `torchvision==0.20.1+cu121` (see requirements.txt).
+
+Next (Phase 3): inference on full tiles and the honest test — 2021-2024 imagery against the independent SGI2023 inventory, including Morteratsch.
+
+## 8. Quick start
 
 ```bash
 git clone https://github.com/maltsev-andrey/glacier-seg.git
@@ -189,11 +209,14 @@ python scripts/check_phase0.py         # stats + overlay PNGs in data/qc/
 
 python scripts/04_make_labels.py       # ~5 min, 0.5 m label tiles under data/labels/
 python scripts/05_chips.py             # ~40 min, ~25 GB of chips under data/chips/
+
+CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=0 \
+  python scripts/train.py              # ~2.5 h on a P100; set phase2.input_set in config.yaml
 ```
 
 All settings live in `config.yaml`. Relative paths resolve against the repository root; `data/` is created automatically and is not tracked by git.
 
-## 8. Repository layout
+## 9. Repository layout
 
 ```
 glacier-seg/
@@ -206,12 +229,13 @@ glacier-seg/
 │   ├── 03_download_tiles.py
 │   ├── check_phase0.py
 │   ├── 04_make_labels.py
-│   └── 05_chips.py
+│   ├── 05_chips.py
+│   └── train.py
 ├── docs/img/                README figures, QC overlays
 └── data/                    (generated, git-ignored) raw tiles, manifests, QC
 ```
 
-## 9. Attribution and license
+## 10. Attribution and license
 
 - **Swiss Glacier Inventory**: GLAMOS - Glacier Monitoring Switzerland, CC BY 4.0.
   SGI2016: Linsbauer, A. et al. (2021), *Frontiers in Earth Science*, doi:[10.3389/feart.2021.704189](https://doi.org/10.3389/feart.2021.704189).

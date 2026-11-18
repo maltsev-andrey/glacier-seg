@@ -7,5 +7,7 @@ pandas>=2.0
 requests>=2.31
 pyyaml>=6.0
 matplotlib>=3.8
+torch==2.5.1+cu121        # Pascal (sm_60) dropped in newer wheels
+torchvision==0.20.1+cu121
 # Phase 1+ (training), installed in the training container
 # torch (CUDA build matching the P100 driver), segmentation-models-pytorch, albumentations, torchmetrics

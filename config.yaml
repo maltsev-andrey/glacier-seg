@@ -79,7 +79,7 @@ phase1:
     test:  [E22-03]
 
 phase2:
-  input_set: rgb             # rgb (3 ch) | rgb_terrain (5 ch: + elevation + slope); run both, compare IoU
+  input_set: rgb_terrain             # rgb (3 ch) | rgb_terrain (5 ch: + elevation + slope); run both, compare IoU
   encoder: resnet34          # segmentation-models-pytorch encoder
   encoder_weights: imagenet  # null for offline / from-scratch runs
   epochs: 60
